@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-# Files Manager Api
-
-A working file management api using redis and mongodb
-=======
 # Files Manager
 
 A simple file management API built with Express, MongoDB, Redis, Bull, and Node.js.
@@ -45,8 +40,6 @@ Start the Redis and MongoDB services on your system and run `yarn start-server` 
 + Create a separate `.env` file for the tests named `.env.test` and store the value of the environment variables for the testing event in it.
 + Run `yarn test` or `npm run test` to execute the E2E tests.
 
-## Authors
+## Documentation
 
-+ 
-+
->>>>>>> 5bc2962fc5de347abc4d725b643cf8583aac1d00
++ TODO: Generate OpenAPI documentation with [**apidoc**](https://www.npmjs.com/package/apidoc).
