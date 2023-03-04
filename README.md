@@ -40,6 +40,7 @@ Start the Redis and MongoDB services on your system and run `yarn start-server` 
 + Create a separate `.env` file for the tests named `.env.test` and store the value of the environment variables for the testing event in it.
 + Run `yarn test` or `npm run test` to execute the E2E tests.
 
-## Documentation
+## Authors
 
-+ TODO: Generate OpenAPI documentation with [**apidoc**](https://www.npmjs.com/package/apidoc).
++ SUARA AYOMIDE
++ ERIC ALARIBE
