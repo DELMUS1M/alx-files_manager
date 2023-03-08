@@ -3,35 +3,51 @@ import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import Queue from 'bull';
 import dbClient from '../utils/db';
-import redisClient from '../utils/redis';
-import { findUserIdByToken } from '../utils/auth';
+// import redisClient from '../utils/redis';
+import { findUserIdByToken, findUserById } from '../utils/auth';
 
 class FilesController {
   static async postUpload(request, response) {
     const fileQueue = new Queue('fileQueue');
+
     const userId = await findUserIdByToken(request);
-    if (!userId) return response.status(401).json({ error: 'Unauthorized' });
+    if (!userId) {
+      return response.status(401).json({ error: 'Unauthorized' });
+    }
 
     let fileInserted;
 
     const { name } = request.body;
-    if (!name) return response.status(400).json({ error: 'Missing name' });
+    if (!name) {
+      return response.status(400).json({ error: 'Missing name' });
+    }
+
     const { type } = request.body;
-    if (!type || !['folder', 'file', 'image'].includes(type)) { return response.status(400).json({ error: 'Missing type' }); }
+    if (!type || !['folder', 'file', 'image'].includes(type)) {
+      return response.status(400).json({ error: 'Missing type' });
+    }
 
     const isPublic = request.body.isPublic || false;
     const parentId = request.body.parentId || 0;
     const { data } = request.body;
-    if (!data && !['folder'].includes(type)) { return response.status(400).json({ error: 'Missing data' }); }
+    if (!data && !['folder'].includes(type)) {
+      return response.status(400).json({ error: 'Missing data' });
+    }
 
     if (parentId !== 0) {
       const parentFileArray = await dbClient.files.find({ _id: ObjectID(parentId) }).toArray();
-      if (parentFileArray.length === 0) return response.status(400).json({ error: 'Parent not found' });
+      if (parentFileArray.length === 0) {
+        return response.status(400).json({ error: 'Parent not found' });
+      }
       const file = parentFileArray[0];
-      if (file.type !== 'folder') return response.status(400).json({ error: 'Parent is not a folder' });
+      if (file.type !== 'folder') {
+        return response.status(400).json({ error: 'Parent is not a folder' });
+      }
     }
 
-    if (!data && type !== 'folder') return response.status(400).json({ error: 'Missing Data' });
+    if (!data && type !== 'folder') {
+      return response.status(400).json({ error: 'Missing Data' });
+    }
 
     if (type === 'folder') {
       fileInserted = await dbClient.files.insertOne({
@@ -75,17 +91,12 @@ class FilesController {
   }
 
   static async getShow(request, response) {
-    const token = request.headers['x-token'];
-    if (!token) {
+    const userID = findUserIdByToken(request);
+    if (!userID) {
       return response.status(401).json({ error: 'Unauthorized' });
     }
 
-    const keyID = await redisClient.get(`auth_${token}`);
-    if (!keyID) {
-      return response.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const user = await dbClient.db.collection('users').findOne({ _id: ObjectID(keyID) });
+    const user = findUserById(userID);
     if (!user) {
       return response.status(401).json({ error: 'Unauthorized' });
     }
@@ -108,20 +119,15 @@ class FilesController {
   }
 
   static async getIndex(request, response) {
-    const token = request.headers['x-token'];
-    if (!token) {
-      return response.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const keyID = await redisClient.get(`auth_${token}`);
-    if (!keyID) {
+    const userID = findUserIdByToken(request);
+    if (!userID) {
       return response.status(401).json({ error: 'Unauthorized' });
     }
 
     const parentId = request.query.parentId || '0';
     const pagination = request.query.page || 0;
 
-    const user = await dbClient.db.collection('users').findOne({ _id: ObjectID(keyID) });
+    const user = findUserById(userID);
     if (!user) {
       response.status(401).json({ error: 'Unauthorized' });
     }
@@ -151,6 +157,66 @@ class FilesController {
     });
 
     return response.send(filesArray);
+  }
+
+  static async putPublish(request, response) {
+    const userID = findUserIdByToken(request);
+    if (!userID) {
+      return response.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const user = findUserById(userID);
+    if (!user) {
+      return response.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const idFile = request.params.id || '';
+
+    let fileDocument = await dbClient.db.collection('files').findOne({ _id: ObjectID(idFile), userId: user._id });
+    if (!fileDocument) {
+      return response.status(404).send({ error: 'Not found' });
+    }
+
+    await dbClient.db.collection('files').update({ _id: ObjectID(idFile) }, { $set: { isPublic: true } });
+    fileDocument = await dbClient.db.collection('files').findOne({ _id: ObjectID(idFile), userId: user._id });
+
+    return response.send({
+      id: fileDocument._id,
+      userId: fileDocument.userId,
+      name: fileDocument.name,
+      type: fileDocument.type,
+      isPublic: fileDocument.isPublic,
+      parentId: fileDocument.parentId,
+    });
+  }
+
+  static async putUnpublish(request, response) {
+    const userID = findUserIdByToken(request);
+    if (!userID) {
+      return response.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const user = findUserById(userID);
+    if (!user) {
+      return response.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const idFile = request.params.id || '';
+
+    let fileDocument = await dbClient.db.collection('files').findOne({ _id: ObjectID(idFile), userId: user._id });
+    if (!fileDocument) return response.status(404).send({ error: 'Not found' });
+
+    await dbClient.db.collection('files').update({ _id: ObjectID(idFile), userId: user._id }, { $set: { isPublic: false } });
+    fileDocument = await dbClient.db.collection('files').findOne({ _id: ObjectID(idFile), userId: user._id });
+
+    return response.send({
+      id: fileDocument._id,
+      userId: fileDocument.userId,
+      name: fileDocument.name,
+      type: fileDocument.type,
+      isPublic: fileDocument.isPublic,
+      parentId: fileDocument.parentId,
+    });
   }
 }
 
